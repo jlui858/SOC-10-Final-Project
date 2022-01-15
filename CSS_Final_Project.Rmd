@@ -1,0 +1,179 @@
+```{r}
+# SET UP
+library(tidyverse)
+df.2021 <- read.csv("2021.csv")
+df.years <- read.csv("world-happiness-report.csv")
+colnames(df.2021)
+```
+
+```{r}
+# HAPPINESS BASED ON WORLD REGION
+
+by.region.score <- group_by(df.2021, Regional.indicator, Ladder.score)
+region.score <- summarise(by.region.score)
+ggplot(region.score, aes(x = Ladder.score, y = Regional.indicator, colour = Regional.indicator)) +
+  geom_boxplot(show.legend = F) +
+  xlab("Ladder Score") + 
+  ylab("Regional Indicator") +
+  ggtitle("Data Distribution by Regional Indicator")
+```
+
+```{r}
+# PREDICT HAPPINESS AS FUNCTION OF COVARIATES
+
+# clean data
+# drop 2, 4, 5, 6, 13-19
+# ladder.score is our outcome variable of interest
+cov.drop <- c(1, 2, 4, 5, 6, 13:19)
+pred.df.2021 <- df.2021[ , -cov.drop]
+
+set.seed(1) 
+sample <- sample.int(n = nrow(pred.df.2021), size = floor(.75 * nrow(pred.df.2021)), replace = F)
+train <- pred.df.2021[sample, ]
+test <- pred.df.2021[-sample, ]
+
+# fit model
+fit_lm <- lm(data = train, Ladder.score ~ .)
+summary(fit_lm)
+
+pred <- predict(fit_lm, test)
+sqrt(mean((test$Ladder.score - pred)^2))
+
+#stargazer
+```
+
+```{r}
+# UNITED STATES SCORE TRENDS
+
+df.us <- filter(df.years, Country.name == "United States")
+ladder.us <- ggplot(df.us, aes(x = year, y = Life.Ladder)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  xlab("") +
+  ylab("Ladder Score")
+soc.support.ua <- ggplot(df.us, aes (x = year, y = Social.support)) +
+  geom_point() +
+  geom_smooth(se = F) + 
+  xlab("") +
+  ylab("Social Support Score")
+life.exp.us <- ggplot(df.us, aes (x = year, y = Healthy.life.expectancy.at.birth)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  xlab("") +
+  ylab("Life Expectancy")
+freedom.us <- ggplot(df.us, aes (x = year, y = Freedom.to.make.life.choices)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  ylab("Freedom to Make Life Choices")
+generosity.us <- ggplot(df.us, aes (x = year, y = Generosity)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  ylab("Generosity Score")
+corruption.us <- ggplot(df.us, aes (x = year, y = Perceptions.of.corruption)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  ylab("Perception of Corruption Score")
+
+ggarrange(ladder.us, soc.support.us, life.exp.us, freedom.us, generosity.us, corruption.us)
+```
+
+```{r}
+# WORLD SCORE TRENDS
+
+df.world.trend <- data.frame(Life.ladder = 1,
+                             Social.support = 1,
+                             Freedom.to.make.life.choices = 1,
+                             Healthy.life.expectancy.at.birth = 1,
+                             Generosity = 1,
+                             Perception.of.corruption = 1)
+for (i in 2005:2019) {
+  df.world <- filter(df.years, year == i)
+  vec.world <- c(mean(df.world$Life.Ladder, na.rm = T), mean(df.world$Social.support, na.rm = T),
+                mean(df.world$Freedom.to.make.life.choices, na.rm = T),
+                mean(df.world$Healthy.life.expectancy.at.birth, na.rm = T),
+                mean(df.world$Generosity, na.rm = T), mean(df.world$Perceptions.of.corruption, na.rm = T))
+  df.world.trend <- rbind(df.world.trend, vec.world)
+}
+df.world.trend <- df.world.trend[-1, ]
+vec.years <- c(2005:2019)
+df.world.trend$year <- vec.years
+
+ladder <- ggplot(df.world.trend, aes(x = year, y = Life.ladder)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  xlab("") +
+  ylab("Ladder Score")
+soc.support <- ggplot(df.world.trend, aes (x = year, y = Social.support)) +
+  geom_point() +
+  geom_smooth(se = F) + 
+  xlab("") +
+  ylab("Social Support Score")
+life.exp <- ggplot(df.world.trend, aes (x = year, y = Healthy.life.expectancy.at.birth)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  xlab("") +
+  ylab("Life Expectancy")
+freedom <- ggplot(df.world.trend, aes (x = year, y = Freedom.to.make.life.choices)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  ylab("Freedom to Make Life Choices")
+generosity <- ggplot(df.world.trend, aes (x = year, y = Generosity)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  ylab("Generosity Score")
+corruption <- ggplot(df.world.trend, aes (x = year, y = Perception.of.corruption)) +
+  geom_point() +
+  geom_smooth(se = F) +
+  ylab("Perception of Corruption Score")
+
+ggarrange(ladder, soc.support, life.exp, freedom, generosity, corruption)
+
+```
+
+```{r}
+# GDP
+ggplot(df.2021, aes(x = Logged.GDP.per.capita, y = Ladder.score, label = Country)) + 
+  geom_point() +
+  geom_text_repel(size = 2.5) +
+  xlab("GDP per Capita (log)") +
+  ylab("Ladder Score") + 
+  theme_bw() +
+  stat_smooth(method = "lm", se = F) + 
+  ggtitle("Ladder Score vs. GDP per Capita")
+
+cor(df.2021$Ladder.score, df.2021$Logged.GDP.per.capita)
+
+```
+
+```{r}
+# EDUCATION
+
+library(ggrepel)
+library(rvest)
+link <- "https://en.wikipedia.org/wiki/Education_Index"
+webpage <- link %>% 
+  httr::GET(config = httr::config(ssl_verifypeer = FALSE)) %>% 
+  read_html()  
+webpage_table_html <- html_nodes(webpage, xpath='//*[@id="mw-content-text"]/div[1]/div[4]/table')
+edu_info <- html_table(webpage_table_html, fill = T, trim = T)
+edu_info <- edu_info[[1]]
+edu_info <- edu_info[, -c(2:19)]
+
+names(df.years)[names(df.years) == 'Country.name'] <- 'Country'
+results <- merge(x=edu_info, y=df.years, by= "Country", all.x = FALSE, all.y = FALSE)
+results <- filter(results, year == "2019")
+results <- results[ , -c(2:12)]
+
+ggplot(results, aes(x = `2019`, y = Life.Ladder, label = Country)) +
+  geom_point() +
+  geom_text_repel(size = 2.5) +
+  xlab("Education Index Score") +
+  ylab("Life Ladder Score") +
+  stat_smooth(method = "lm", se = F) +
+  ggtitle("World Education Index vs. Life Ladder Score (2019)") + 
+  theme_bw()
+
+library(ggpubr)
+cor(results$`2019`, results$Life.Ladder)
+```
+
